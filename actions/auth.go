@@ -11,6 +11,7 @@ import (
 	"github.com/gobuffalo/pop"
 	"github.com/gobuffalo/validate"
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // AuthCreate attempts to log the user in with an existing account.
@@ -30,9 +31,7 @@ func AuthCreate(c buffalo.Context) error {
 		c.Set("user", u)
 		verrs := validate.NewErrors()
 		verrs.Add("email", "invalid email/password")
-		return c.Render(422, r.JSON(map[string]interface{}{
-			"errors": verrs,
-		}))
+		return c.Render(422, r.JSON(verrs))
 	}
 
 	if err != nil {
@@ -43,14 +42,18 @@ func AuthCreate(c buffalo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Create Token
-	token := jwt.New(jwt.SigningMethodHS256)
+	err = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(u.Password))
+	if err != nil {
+		return bad()
+	}
 
-	// Set Claims
-	claims := token.Claims.(jwt.MapClaims)
-	claims["name"] = u.FullName()
-	claims["id"] = u.ID
-	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+	claims := jwt.StandardClaims{
+		ExpiresAt: time.Now().Add(time.Hour * 24 * 7).Unix(),
+		Id:        u.ID.String(),
+	}
+
+	// Create Token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	// Generate encoded token and send it as response
 	// TODO: Change secret string by put your key
