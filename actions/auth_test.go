@@ -4,12 +4,6 @@ import (
 	"github.com/Obsinqsob01/jwt_boilerplate/models"
 )
 
-func (as *ActionSuite) Test_Auth_New() {
-	res := as.HTML("/signin").Get()
-	as.Equal(200, res.Code)
-	as.Contains(res.Body.String(), "Sign In")
-}
-
 func (as *ActionSuite) Test_Auth_Create() {
 	u := &models.User{
 		Email:                "mark@example.com",
@@ -22,7 +16,7 @@ func (as *ActionSuite) Test_Auth_Create() {
 
 	res := as.HTML("/signin").Post(u)
 	as.Equal(302, res.Code)
-	as.Equal("/", res.Location())
+	as.Contains(res.Body.String(), "token")
 }
 
 func (as *ActionSuite) Test_Auth_Create_Redirect() {
@@ -39,7 +33,6 @@ func (as *ActionSuite) Test_Auth_Create_Redirect() {
 
 	res := as.HTML("/signin").Post(u)
 	as.Equal(302, res.Code)
-	as.Equal(res.Location(), "/some/url")
 }
 
 func (as *ActionSuite) Test_Auth_Create_UnknownUser() {

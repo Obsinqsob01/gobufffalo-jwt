@@ -63,7 +63,7 @@ func AuthCreate(c buffalo.Context) error {
 	}
 
 	// Return token
-	return c.Render(200, r.JSON(map[string]string{
+	return c.Render(302, r.JSON(map[string]string{
 		"token": t,
 	}))
 

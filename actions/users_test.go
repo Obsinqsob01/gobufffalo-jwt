@@ -4,11 +4,6 @@ import (
 	"github.com/Obsinqsob01/jwt_boilerplate/models"
 )
 
-func (as *ActionSuite) Test_Users_New() {
-	res := as.HTML("/users/new").Get()
-	as.Equal(200, res.Code)
-}
-
 func (as *ActionSuite) Test_Users_Create() {
 	count, err := as.DB.Count("users")
 	as.NoError(err)
@@ -22,6 +17,7 @@ func (as *ActionSuite) Test_Users_Create() {
 
 	res := as.HTML("/users").Post(u)
 	as.Equal(302, res.Code)
+	as.Contains(res.Body.String(), "token")
 
 	count, err = as.DB.Count("users")
 	as.NoError(err)

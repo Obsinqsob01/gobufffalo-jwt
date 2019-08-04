@@ -57,7 +57,7 @@ func SetCurrentUser(next buffalo.Handler) buffalo.Handler {
 	return func(c buffalo.Context) error {
 		tokenString := c.Request().Header.Get("Authorization")
 
-		tokenString = strings.Split(tokenString, "Bearer ")[1]
+		tokenString = strings.Split(tokenString, "Bearer ")[0]
 
 		if len(tokenString) == 0 {
 			return c.Error(http.StatusUnauthorized, fmt.Errorf("No token set in headers"))
