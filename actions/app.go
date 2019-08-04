@@ -62,7 +62,9 @@ func App() *buffalo.App {
 		app.Use(Authorize)
 		app.POST("/users", UsersCreate)
 		app.POST("/signin", AuthCreate)
+		app.GET("/as", ExampleHandler)
 		app.Middleware.Skip(Authorize, HomeHandler, UsersCreate, AuthCreate)
+		app.Middleware.Skip(SetCurrentUser, AuthCreate)
 	}
 
 	return app
