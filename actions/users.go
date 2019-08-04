@@ -1,17 +1,16 @@
 package actions
 
 import (
+	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/Obsinqsob01/jwt_boilerplate/models"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gobuffalo/buffalo"
 	"github.com/gobuffalo/pop"
 	"github.com/pkg/errors"
 )
-
-func UsersNew(c buffalo.Context) error {
-	u := models.User{}
-	c.Set("user", u)
-	return c.Render(200, r.HTML("users/new.html"))
-}
 
 // UsersCreate registers a new user with the application.
 func UsersCreate(c buffalo.Context) error {
@@ -27,15 +26,29 @@ func UsersCreate(c buffalo.Context) error {
 	}
 
 	if verrs.HasAny() {
-		c.Set("user", u)
-		c.Set("errors", verrs)
-		return c.Render(200, r.HTML("users/new.html"))
+		return c.Render(401, r.JSON(map[string]interface{}{"error": verrs}))
 	}
 
-	c.Session().Set("current_user_id", u.ID)
-	c.Flash().Add("success", "Welcome to Buffalo!")
+	// Create Token
+	token := jwt.New(jwt.SigningMethodHS256)
 
-	return c.Redirect(302, "/")
+	// Set Claims
+	claims := token.Claims.(jwt.MapClaims)
+	claims["name"] = u.FullName()
+	claims["id"] = u.ID
+	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+
+	// Generate encoded token and send it as response
+	// TODO: Change secret string by put your key
+	t, err := token.SignedString([]byte("secret"))
+	if err != nil {
+		return err
+	}
+
+	// Return token
+	return c.Render(200, r.JSON(map[string]string{
+		"token": t,
+	}))
 }
 
 // SetCurrentUser attempts to find a user based on the current_user_id
@@ -58,17 +71,38 @@ func SetCurrentUser(next buffalo.Handler) buffalo.Handler {
 // Authorize require a user be logged in before accessing a route
 func Authorize(next buffalo.Handler) buffalo.Handler {
 	return func(c buffalo.Context) error {
-		if uid := c.Session().Get("current_user_id"); uid == nil {
-			c.Session().Set("redirectURL", c.Request().URL.String())
+		tokenString := c.Request().Header.Get("Authorization")
 
-			err := c.Session().Save()
-			if err != nil {
-				return errors.WithStack(err)
+		if len(tokenString) == 0 {
+			return c.Error(http.StatusUnauthorized, fmt.Errorf("No token set in headers"))
+		}
+
+		token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("Unexpected signin method: %v", token.Header["alg"])
 			}
 
-			c.Flash().Add("danger", "You must be authorized to see that page")
-			return c.Redirect(302, "/")
+			// read the key
+			// TODO: update by put key
+			mySignedKey := "secret"
+
+			return mySignedKey, nil
+
+		})
+
+		// Getting claims
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if ok && token.Valid {
+			u := models.User{}
+			tx := c.Value("tx").(*pop.Connection)
+
+			tx.Find(&u, claims["id"])
+
+			c.Set("user", u)
+
+			return next(c)
 		}
-		return next(c)
+
+		return c.Error(http.StatusUnauthorized, fmt.Errorf("Failed to validate token: %v", claims))
 	}
 }
