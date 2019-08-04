@@ -21,8 +21,8 @@ type User struct {
 	Email        string    `json:"email" db:"email"`
 	PasswordHash string    `json:"password_hash" db:"password_hash"`
 
-	Password             string `json:"-" db:"-"`
-	PasswordConfirmation string `json:"-" db:"-"`
+	Password             string `json:"password" db:"-"`
+	PasswordConfirmation string `json:"password_confirmation" db:"-"`
 
 	//Extra fields
 
@@ -47,6 +47,11 @@ func (u *User) Create(tx *pop.Connection) (*validate.Errors, error) {
 func (u User) String() string {
 	ju, _ := json.Marshal(u)
 	return string(ju)
+}
+
+// FullName return user full name
+func (u User) FullName() string {
+	return strings.Join([]string{u.FirstName, u.LastName}, " ")
 }
 
 // Users is not required by pop and may be deleted
