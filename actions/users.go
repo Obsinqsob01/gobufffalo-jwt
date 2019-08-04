@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Obsinqsob01/jwt_boilerplate/models"
@@ -29,14 +30,13 @@ func UsersCreate(c buffalo.Context) error {
 		return c.Render(401, r.JSON(verrs))
 	}
 
-	// Create Token
-	token := jwt.New(jwt.SigningMethodHS256)
+	claims := jwt.StandardClaims{
+		ExpiresAt: time.Now().Add(time.Hour * 24 * 7).Unix(),
+		Id:        u.ID.String(),
+	}
 
-	// Set Claims
-	claims := token.Claims.(jwt.MapClaims)
-	claims["name"] = u.FullName()
-	claims["id"] = u.ID
-	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+	// Create Token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	// Generate encoded token and send it as response
 	// TODO: Change secret string by put your key
@@ -55,16 +55,43 @@ func UsersCreate(c buffalo.Context) error {
 // in the session. If one is found it is set on the context.
 func SetCurrentUser(next buffalo.Handler) buffalo.Handler {
 	return func(c buffalo.Context) error {
-		if uid := c.Session().Get("current_user_id"); uid != nil {
-			u := &models.User{}
-			tx := c.Value("tx").(*pop.Connection)
-			err := tx.Find(u, uid)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-			c.Set("current_user", u)
+		tokenString := c.Request().Header.Get("Authorization")
+
+		tokenString = strings.Split(tokenString, "Bearer ")[1]
+
+		if len(tokenString) == 0 {
+			return c.Error(http.StatusUnauthorized, fmt.Errorf("No token set in headers"))
 		}
-		return next(c)
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("Unexpected signin method: %v", token.Header["alg"])
+			}
+
+			// read the key
+			// TODO: update by put key
+			mySignedKey := []byte("secret")
+
+			return mySignedKey, nil
+		})
+
+		if err != nil {
+			return c.Error(http.StatusUnauthorized, fmt.Errorf("Could not parse the token, %v", err))
+		}
+
+		// Getting claims
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if ok && token.Valid {
+			u := models.User{}
+			tx := c.Value("tx").(*pop.Connection)
+
+			tx.Find(&u, claims["Id"])
+
+			c.Set("user", u)
+
+			return next(c)
+		}
+		return c.Error(http.StatusUnauthorized, fmt.Errorf("Failed to validate token: %v", claims))
 	}
 }
 
@@ -73,22 +100,27 @@ func Authorize(next buffalo.Handler) buffalo.Handler {
 	return func(c buffalo.Context) error {
 		tokenString := c.Request().Header.Get("Authorization")
 
+		tokenString = strings.Split(tokenString, "Bearer ")[1]
+
 		if len(tokenString) == 0 {
 			return c.Error(http.StatusUnauthorized, fmt.Errorf("No token set in headers"))
 		}
 
-		token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("Unexpected signin method: %v", token.Header["alg"])
 			}
 
 			// read the key
 			// TODO: update by put key
-			mySignedKey := "secret"
+			mySignedKey := []byte("secret")
 
 			return mySignedKey, nil
-
 		})
+
+		if err != nil {
+			return c.Error(http.StatusUnauthorized, fmt.Errorf("Could not parse the token, %v", err))
+		}
 
 		// Getting claims
 		claims, ok := token.Claims.(jwt.MapClaims)
@@ -96,7 +128,7 @@ func Authorize(next buffalo.Handler) buffalo.Handler {
 			u := models.User{}
 			tx := c.Value("tx").(*pop.Connection)
 
-			tx.Find(&u, claims["id"])
+			tx.Find(&u, claims["Id"])
 
 			c.Set("user", u)
 
@@ -105,4 +137,8 @@ func Authorize(next buffalo.Handler) buffalo.Handler {
 
 		return c.Error(http.StatusUnauthorized, fmt.Errorf("Failed to validate token: %v", claims))
 	}
+}
+
+func ExampleHandler(c buffalo.Context) error {
+	return c.Render(200, r.JSON("It works!"))
 }
