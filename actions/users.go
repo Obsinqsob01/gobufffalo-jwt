@@ -26,7 +26,7 @@ func UsersCreate(c buffalo.Context) error {
 	}
 
 	if verrs.HasAny() {
-		return c.Render(401, r.JSON(map[string]interface{}{"error": verrs}))
+		return c.Render(401, r.JSON(verrs))
 	}
 
 	// Create Token
